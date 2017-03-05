@@ -33,6 +33,7 @@ data Command =
             | Cmdcmd   (Command,     Command   )
             | Ifthen   (Expression,  Command, Command)
             | Whiledo  (Expression,  Command   )
+            | ForTo    (Numeral,Numeral,Numeral,Command)
 
 data Expression =
             Num    Numeral
@@ -44,6 +45,10 @@ data Expression =
     	    | Subof   (Expression,  Expression)
     	    | Prodof  (Expression,  Expression)
     	    | Less    (Expression,  Expression)
+    	    
+          | Take    (Expression,  Expression)
+          | Fst Expression
+          | Snd Expression
          -- | Leten   (Declaration, Expression)
          --   deriving Show
 
@@ -52,7 +57,7 @@ data Declaration =
 	    | Vardef   (Ident,  TypeDef   )
 
 data TypeDef =
-	      Bool | Int
+	      Bool | Int | TypeDef TypeDef
 	
 -- --------------------------------------------	--
 -- ---------- Semantic Domains ----------------	--
@@ -63,6 +68,7 @@ type	Location	= Int
 
 data	Value	= IntValue    Int
 		        | TruthValue  Bool
+-- Pairvalue   PairValue
                   deriving (Eq, Show)
 
 type	Storable  = Value
@@ -72,6 +78,8 @@ data	Bindable  = Const Value | Variable Location
 
 data	Denotable = Unbound | Bound Bindable
                   deriving (Eq, Show)
+
+data  PairValue = Value Value
 
 -- --------------------------------------------	--
 -- ---------- Semantic Functions --------------	--
@@ -192,6 +200,17 @@ execute ( Whiledo(e,c) ) en st =
             in
             executeWhile en st
 
+----------------Adding New feature-------------
+
+  -------From e1 to e2 in steps of e3 execute c
+execute (ForTo(e1,e2,e3,c)) env sto = 
+                let forLoop e1 env sto = if( e1 + e3 < e2 )
+                                         then forLoop (e1+e3) env ( execute c env sto) 
+                                         else sto
+                in
+                    forLoop e1 env sto
+
+------------------------------------------------
      			-- simple, just build a Const
 evaluate ( Num(n)  )  env sto  = IntValue n
 evaluate ( True_   )  env sto  = TruthValue  True
@@ -226,6 +245,22 @@ evaluate ( Notexp(e) ) env sto =
      	if evaluate e env sto == TruthValue True
             then TruthValue False 
             else TruthValue True
+
+{-- --------- * There was error
+evaluate (Take (e1, e2)) env sto =
+          let v1 = evaluate e1 env sto
+              v2 = evaluate e2 env sto 
+          in Pairvalue v1 v2 
+
+evaluate (Fst (e1)) env sto =
+        let Pairvalue val1 val2 = evaluate e1 env sto 
+        in val1
+
+
+evaluate (Snd (e1)) env sto =
+        let Pairvalue (val1, val2) = evaluate e1 env sto 
+        in val2
+--}
 
 {-- ------- * Later...
      			-- layer environment, and compute result
@@ -412,11 +447,47 @@ sto2 = execute pgm2  env_null sto_null   -- y= 0 , z = 2 + 2 + 2 = 6
 
 s3 = dump sto2
 
+-- ------------------------------------------
+-- ----------Manual Test---------------------
+
+pgm4 =
+  Letin( Constdef( "x", Num(2)),
+
+       Letin( Vardef( "y", Int),
+
+              Cmdcmd( Assign( "y", Num(3)),
+
+                  Letin ( Vardef( "z", Int),
+
+                      Cmdcmd( Assign( "z",Num(0)),
+
+                                      ForTo( 0, 10 , 2 ,
+
+                                          Cmdcmd( Assign("z", Sumof(z_,x_)),
+
+                                                  Assign("y", Prodof(y_,Num(2)))
+
+                          )))))))
+
+       
+
+sto5 = execute pgm4  env_null sto_null
+s4   = dump sto5
+
+factorial :: (Eq a, Num a) => a -> a
+factorial n = if n == 0 then 1 else n * factorial ( n - 1)
+
+power :: (Num a, Integral b) => a -> b -> a
+power x 1  = x
+power x n  = x * power x (n-1)
 
 --------------------------------------------
 impTestStos = [ dump s1, s2, s3 ]
-impTestVals = [ v1, v2, v3, v4, v6, v7 ]
-
+impTestVals = [ v1, v2, v3 ]
+manTestVals = [ v4, v6, v7 ]
+manTestStos = [ s4]
+fact        = [ factorial 5]
+pow         = [ power 5 3]
 
 --c1 = Equal(e1)
 --c2 = Equal(e2)
@@ -426,3 +497,10 @@ impTestVals = [ v1, v2, v3, v4, v6, v7 ]
 impTests =  do print "------APL:: DSem_imp"
                print impTestVals
                print impTestStos
+               print "-------Manual Test---"
+               print manTestStos
+               print manTestVals
+               print "-------Factorial  ---"
+               print fact
+               print "-------Power      ---"
+               print pow
